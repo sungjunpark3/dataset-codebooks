@@ -242,9 +242,6 @@ render_card_static <- function(item) {
     '<div class="desc">', html_escape(item$description), '</div>',
     '</div>', note_html, '</div>',
     '<div class="card-body"><section>',
-    '<div class="section-title">변수 세부설명 <b>',
-    format(length(item$values), big.mark = ","),
-    '개</b></div>',
     render_value_table_static(item$values),
     '</section>',
     business_html,
@@ -253,14 +250,7 @@ render_card_static <- function(item) {
 }
 
 source_note_html <- paste0(
-  '<strong>참고 파일</strong> ', html_escape(payload$meta$source_file),
-  '<span> / ', html_escape(payload$meta$source_sheet), ', ',
-  html_escape(payload$meta$supplement_sheet), '</span>',
-  if (payload$meta$requested_note != "") {
-    paste0('<p>', html_escape(payload$meta$requested_note), '</p>')
-  } else {
-    ""
-  }
+  '<strong>참고 파일</strong> <code>', html_escape(payload$meta$source_file), '</code>'
 )
 
 cards_html <- paste(vapply(variables, render_card_static, character(1)), collapse = "\n")
@@ -353,6 +343,10 @@ html_head <- paste0('<!doctype html>
       font: inherit;
     }
 
+    button {
+      cursor: pointer;
+    }
+
     .page {
       width: min(1120px, calc(100% - 28px));
       margin: 0 auto;
@@ -373,7 +367,7 @@ html_head <- paste0('<!doctype html>
 
     .title-row {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: space-between;
       gap: 14px;
       margin-bottom: 14px;
@@ -386,6 +380,13 @@ html_head <- paste0('<!doctype html>
       font-weight: 800;
       letter-spacing: 0;
       word-break: keep-all;
+    }
+
+    .title-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
     }
 
     .count-pill {
@@ -407,9 +408,78 @@ html_head <- paste0('<!doctype html>
       font-weight: 850;
     }
 
+    .theme-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 58px;
+      height: 34px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel);
+      color: var(--muted);
+      outline: none;
+    }
+
+    .theme-toggle:focus-visible {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px var(--focus);
+    }
+
+    .theme-toggle-track {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    .theme-toggle-thumb {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 26px;
+      height: 26px;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: transform .18s ease;
+    }
+
+    :root[data-theme="dark"] .theme-toggle-thumb {
+      transform: translateX(24px);
+    }
+
+    .theme-toggle-icon {
+      position: relative;
+      z-index: 1;
+      width: 15px;
+      height: 15px;
+      justify-self: center;
+      transition: color .18s ease;
+    }
+
+    .theme-toggle .sun-icon {
+      color: #ffffff;
+    }
+
+    .theme-toggle .moon-icon {
+      color: var(--muted);
+    }
+
+    :root[data-theme="dark"] .theme-toggle .sun-icon {
+      color: var(--muted);
+    }
+
+    :root[data-theme="dark"] .theme-toggle .moon-icon {
+      color: #ffffff;
+    }
+
     .controls {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 150px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 10px;
     }
 
@@ -457,6 +527,15 @@ html_head <- paste0('<!doctype html>
 
     .source-note strong {
       color: var(--ink);
+    }
+
+    .source-note code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: var(--soft);
+      color: var(--accent);
+      font-size: .9em;
+      word-break: break-word;
     }
 
     .source-note p {
@@ -641,12 +720,21 @@ html_head <- paste0('<!doctype html>
       }
 
       .title-row {
-        display: block;
+        align-items: center;
         margin-bottom: 10px;
       }
 
-      .count-pill {
-        margin-top: 8px;
+      h1 {
+        font-size: 1.18rem;
+      }
+
+      .title-actions .count-pill {
+        display: none;
+      }
+
+      .theme-toggle {
+        width: 54px;
+        height: 32px;
       }
 
       .controls {
@@ -671,43 +759,14 @@ html_head <- paste0('<!doctype html>
         padding: 12px 13px 13px;
       }
 
-      table,
-      tbody,
-      tr,
-      td {
-        display: block;
-        width: 100%;
-      }
-
-      thead {
-        display: none;
-      }
-
-      tr {
-        padding: 8px 10px;
-        border-bottom: 1px solid var(--line);
-      }
-
-      tr:last-child {
-        border-bottom: 0;
-      }
-
-      td {
-        padding: 3px 0;
-        border-bottom: 0;
-      }
-
-      td::before {
-        display: block;
-        margin-bottom: 1px;
-        color: var(--muted);
-        font-size: .74rem;
-        font-weight: 850;
-        content: attr(data-label);
-      }
-
       .value-code {
+        width: 34%;
         min-width: 0;
+      }
+
+      th,
+      td {
+        padding: 7px 8px;
       }
     }
   </style>
@@ -717,7 +776,28 @@ html_head <- paste0('<!doctype html>
     <div class="page top">
       <div class="title-row">
         <h1>표본코호트 맞춤형 제공 컬럼</h1>
-        <div class="count-pill">표시 변수 <b id="visibleCount">', length(variables), '</b> / <span id="totalCount">', length(variables), '</span></div>
+        <div class="title-actions">
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="다크 모드로 전환" aria-pressed="false" title="화면 모드 전환">
+            <span class="theme-toggle-track" aria-hidden="true">
+              <span class="theme-toggle-thumb"></span>
+              <svg class="theme-toggle-icon sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="4"></circle>
+                <path d="M12 2v2"></path>
+                <path d="M12 20v2"></path>
+                <path d="m4.93 4.93 1.41 1.41"></path>
+                <path d="m17.66 17.66 1.41 1.41"></path>
+                <path d="M2 12h2"></path>
+                <path d="M20 12h2"></path>
+                <path d="m6.34 17.66-1.41 1.41"></path>
+                <path d="m19.07 4.93-1.41 1.41"></path>
+              </svg>
+              <svg class="theme-toggle-icon moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+              </svg>
+            </span>
+          </button>
+          <div class="count-pill">표시 변수 <b id="visibleCount">', length(variables), '</b> / <span id="totalCount">', length(variables), '</span></div>
+        </div>
       </div>
       <div class="controls">
         <div class="control">
@@ -727,14 +807,6 @@ html_head <- paste0('<!doctype html>
         <div class="control">
           <label for="variableFilter">변수명</label>
           <select id="variableFilter"></select>
-        </div>
-        <div class="control">
-          <label for="themeSelect">화면 모드</label>
-          <select id="themeSelect">
-            <option value="auto">자동</option>
-            <option value="light">라이트</option>
-            <option value="dark">다크</option>
-          </select>
         </div>
       </div>
     </div>
@@ -754,7 +826,7 @@ html_tail <- '</script>
 
     const tableFilter = document.getElementById("tableFilter");
     const variableFilter = document.getElementById("variableFilter");
-    const themeSelect = document.getElementById("themeSelect");
+    const themeToggle = document.getElementById("themeToggle");
     const cards = document.getElementById("cards");
     const noResults = document.getElementById("noResults");
     const visibleCount = document.getElementById("visibleCount");
@@ -788,13 +860,8 @@ html_tail <- '</script>
     };
 
     const renderSource = () => {
-      const note = meta.requested_note
-        ? `<p>${escapeHtml(meta.requested_note)}</p>`
-        : "";
       sourceNote.innerHTML = `
-        <strong>참고 파일</strong> ${escapeHtml(meta.source_file)}
-        <span> / ${escapeHtml(meta.source_sheet)}, ${escapeHtml(meta.supplement_sheet)}</span>
-        ${note}
+        <strong>참고 파일</strong> <code>${escapeHtml(meta.source_file)}</code>
       `;
     };
 
@@ -855,7 +922,6 @@ html_tail <- '</script>
           </div>
           <div class="card-body">
             <section>
-              <div class="section-title">변수 세부설명 <b>${(item.values || []).length.toLocaleString("ko-KR")}개</b></div>
               ${renderValueTable(item.values || [])}
             </section>
             ${businessBlock}
@@ -894,13 +960,23 @@ html_tail <- '</script>
       noResults.classList.toggle("is-visible", filtered.length === 0);
     };
 
+    const preferredTheme = () => {
+      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+
+    const syncThemeToggle = (theme) => {
+      const isDark = theme === "dark";
+      themeToggle.setAttribute("aria-pressed", String(isDark));
+      themeToggle.setAttribute("aria-label", isDark ? "라이트 모드로 전환" : "다크 모드로 전환");
+      themeToggle.title = isDark ? "라이트 모드로 전환" : "다크 모드로 전환";
+    };
+
     const applyTheme = (theme) => {
-      if (theme === "auto") {
-        document.documentElement.removeAttribute("data-theme");
-      } else {
-        document.documentElement.setAttribute("data-theme", theme);
-      }
+      document.documentElement.setAttribute("data-theme", theme);
       localStorage.setItem("dataset-codebooks-theme", theme);
+      syncThemeToggle(theme);
     };
 
     const init = () => {
@@ -909,8 +985,7 @@ html_tail <- '</script>
       makeOptions(tableFilter, uniqueInOrder(variables.map((item) => item.table)), "전체 테이블");
       refreshVariableOptions();
 
-      const savedTheme = localStorage.getItem("dataset-codebooks-theme") || "auto";
-      themeSelect.value = savedTheme;
+      const savedTheme = localStorage.getItem("dataset-codebooks-theme") || preferredTheme();
       applyTheme(savedTheme);
 
       tableFilter.addEventListener("change", () => {
@@ -919,7 +994,10 @@ html_tail <- '</script>
       });
 
       variableFilter.addEventListener("change", render);
-      themeSelect.addEventListener("change", () => applyTheme(themeSelect.value));
+      themeToggle.addEventListener("click", () => {
+        const currentTheme = document.documentElement.getAttribute("data-theme") || preferredTheme();
+        applyTheme(currentTheme === "dark" ? "light" : "dark");
+      });
 
       render();
     };
