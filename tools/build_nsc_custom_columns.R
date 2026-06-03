@@ -152,7 +152,7 @@ if (file.exists(requested_file)) {
 
 payload <- list(
   meta = list(
-    title = "표본코호트 맞춤형 제공 컬럼",
+    title = "건강보험 빅데이터 맞춤형연구DB",
     source_file = basename(source_file),
     source_sheet = source_sheet,
     supplement_sheet = supplement_sheet,
@@ -261,7 +261,7 @@ html_head <- paste0('<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>표본코호트 맞춤형 제공 컬럼</title>
+  <title>건강보험 빅데이터 맞춤형연구DB</title>
   <style>
     @font-face {
       font-family: "PretendardVariable";
@@ -775,7 +775,7 @@ html_head <- paste0('<!doctype html>
   <header>
     <div class="page top">
       <div class="title-row">
-        <h1>표본코호트 맞춤형 제공 컬럼</h1>
+        <h1>건강보험 빅데이터 맞춤형연구DB</h1>
         <div class="title-actions">
           <button class="theme-toggle" id="themeToggle" type="button" aria-label="다크 모드로 전환" aria-pressed="false" title="화면 모드 전환">
             <span class="theme-toggle-track" aria-hidden="true">
