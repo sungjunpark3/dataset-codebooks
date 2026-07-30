@@ -2,14 +2,23 @@ library(data.table)
 library(readxl)
 library(jsonlite)
 
-project_dir <- normalizePath(file.path(Sys.getenv("HOME"), "dataset-codebooks"))
+# PATHS ----------------------------------------------------------------------
 
-requested_file <- "/Users/sungjunpark/Downloads/표본코호트DB 2.2 레이아웃.xlsx"
-source_file <- file.path(project_dir, "assets", "맞춤형 자료 제공 컬럼 레이아웃_2026_v1.xlsx")
-source_sheet <- "맞춤형 제공 컬럼"
-supplement_sheet <- "사업장업종세분류"
+# 저장소 루트는 이 스크립트(tools/*.R) 위치를 기준으로 잡는다.
+# Rscript 실행 시 --file= 인자가, source() 실행 시 ofile이 경로를 준다.
+cli_args <- commandArgs()
+script_path <- sub("^--file=", "", grep("^--file=", cli_args, value = TRUE))
+if (length(script_path) == 0) {
+  script_path <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
+}
+if (length(script_path) == 0 || is.null(script_path)) {
+  stop("스크립트 경로를 찾지 못했습니다. Rscript tools/build_nsc_custom_columns.R 로 실행하세요.")
+}
+project_dir <- normalizePath(file.path(dirname(script_path), ".."))
 
 out_files <- file.path(project_dir, "index.html")
+
+# HELPERS --------------------------------------------------------------------
 
 clean_text <- function(x) {
   x <- as.character(x)
@@ -58,6 +67,15 @@ read_clean_sheet <- function(path, sheet) {
   DT[, rid := .I]
   DT
 }
+
+# CUSTOM_DB ------------------------------------------------------------------
+# 맞춤형연구DB: c1 테이블구분 / c3 순번 / c4 변수명 / c5 설명 /
+#               c6~c15 (변수값, 설명) 5쌍 / c16 비고
+
+source_file <- file.path(project_dir, "assets",
+                         "맞춤형 자료 제공 컬럼 레이아웃_2026_v1.xlsx")
+source_sheet <- "맞춤형 제공 컬럼"
+supplement_sheet <- "사업장업종세분류"
 
 extract_value_pairs <- function(block) {
   value_cols <- paste0("c", c(6, 8, 10, 12, 14))
@@ -121,7 +139,7 @@ variable_starts <- main[
 
 business_codes <- extract_business_codes(source_file, supplement_sheet)
 
-variables <- lapply(seq_along(variable_starts), function(i) {
+custom_variables <- lapply(seq_along(variable_starts), function(i) {
   start <- variable_starts[i]
   end <- if (i < length(variable_starts)) variable_starts[i + 1] - 1 else nrow(main)
   block <- main[rid >= start & rid <= end]
@@ -130,6 +148,7 @@ variables <- lapply(seq_along(variable_starts), function(i) {
 
   list(
     table = first$table_group,
+    section = "",
     seq = first$c3,
     variable = first$c4,
     description = first$c5,
@@ -139,25 +158,125 @@ variables <- lapply(seq_along(variable_starts), function(i) {
   )
 })
 
-requested_note <- ""
-if (file.exists(requested_file)) {
-  requested_sheets <- excel_sheets(requested_file)
-  if (!source_sheet %in% requested_sheets) {
-    requested_note <- paste0(
-      "요청 파일 '", basename(requested_file), "'에는 '", source_sheet,
-      "' 시트가 없어 동일 폴더의 '", basename(source_file), "'을 사용했습니다."
+# HEALTH_EXAM ----------------------------------------------------------------
+# 일반건강검진: 시트 1장 = 연도구간. c1 순번/섹션마커 / c2 변수명 뒤로
+# 연도그룹이 7열씩(컬럼명, (변수값, 설명) 3쌍) 반복된다. 3행에 연도 라벨.
+
+exam_file <- file.path(project_dir, "assets",
+                       "일반건강검진 자료 제공 컬럼 레이아웃_260527.xlsx")
+
+# 연속된 연도그룹은 "2009~2011"로 압축. gi는 시트 안에서의 연도그룹 순번.
+compress_year_labels <- function(labels, gi) {
+  gi <- sort(unique(gi))
+  runs <- split(gi, cumsum(c(1, diff(gi) != 1)))
+  parts <- vapply(runs, function(r) {
+    from <- sub("[^0-9].*$", "", labels[r[1]])          # "2023~2024" -> "2023"
+    to <- sub("^.*[^0-9]", "", labels[r[length(r)]])    # "2023~2024" -> "2024"
+    if (from == to) from else paste0(from, "~", to)
+  }, character(1))
+  paste(parts, collapse = ", ")
+}
+
+# 연도그룹 하나(gcol)에서 (변수값, 설명) 쌍을 셀 배치 순서대로 뽑는다.
+extract_exam_pairs <- function(block, gcol) {
+  pairs <- rbindlist(lapply(0:2, function(k) {
+    data.table(
+      ord = seq_len(nrow(block)) * 3 + k,
+      value = block[[paste0("c", gcol + 1 + k * 2)]],
+      label = block[[paste0("c", gcol + 2 + k * 2)]]
     )
+  }))
+  pairs <- pairs[!(is_blank(value) & is_blank(label))]
+  setorder(pairs, ord)
+  unique(pairs[, .(value, label)], by = c("value", "label"))
+}
+
+exam_variables <- list()
+
+for (sheet in excel_sheets(exam_file)) {
+  exam <- read_clean_sheet(exam_file, sheet)
+
+  year_row <- unlist(exam[3, !"rid"])
+  group_cols <- which(nzchar(year_row))
+  group_cols <- group_cols[group_cols >= 3]      # c1 순번, c2 변수명 제외
+  year_labels <- unname(year_row[group_cols])
+
+  exam[, section := fifelse(grepl("^\\*\\*", c1), sub("^\\*+ *", "", c1),
+                            NA_character_)]
+  exam[, section := fill_down_character(section)]
+
+  variable_rows <- exam[rid >= 5 & !is_blank(c2), rid]
+
+  for (i in seq_along(variable_rows)) {
+    start <- variable_rows[i]
+    end <- if (i < length(variable_rows)) variable_rows[i + 1] - 1 else nrow(exam)
+    block <- exam[rid >= start & rid <= end]
+
+    col_names <- vapply(group_cols, function(g) block[[paste0("c", g)]][1],
+                        character(1))
+    present <- which(nzchar(col_names))
+    if (length(present) == 0) next
+
+    pairs_by_group <- lapply(present, function(k) {
+      extract_exam_pairs(block, group_cols[k])
+    })
+    names(pairs_by_group) <- as.character(present)
+
+    # 같은 블록이라도 연도에 따라 컬럼명이 바뀌면 카드를 나눈다 (예: 요단백)
+    for (col_name in unique(col_names[present])) {
+      gi <- present[col_names[present] == col_name]
+      picked <- pairs_by_group[as.character(gi)]
+      sig <- vapply(picked, function(x) {
+        paste(x$value, x$label, collapse = "\r")
+      }, character(1))
+
+      if (length(unique(sig)) == 1) {
+        values <- copy(picked[[1]])[, year := ""]
+      } else {
+        # 연도별 코드가 다르면 합집합을 만들고 쌍마다 적용연도를 붙인다
+        merged <- rbindlist(lapply(seq_along(gi), function(k) {
+          copy(picked[[k]])[, grp := gi[k]]
+        }))
+        merged[, seen := .I]
+        values <- merged[, .(ord = min(seen),
+                             year = compress_year_labels(year_labels, grp)),
+                         by = .(value, label)]
+        setorder(values, ord)
+        values[, ord := NULL]
+      }
+
+      year_note <- if (length(gi) == length(group_cols)) {
+        character(0)
+      } else {
+        paste0("제공연도 ", compress_year_labels(year_labels, gi))
+      }
+
+      exam_variables[[length(exam_variables) + 1]] <- list(
+        table = paste("일반건강검진", sheet),
+        section = block$section[1],
+        seq = block$c1[1],
+        variable = col_name,
+        description = block$c2[1],
+        values = lapply(seq_len(nrow(values)), function(r) {
+          item <- list(value = values$value[r], label = values$label[r])
+          if (nzchar(values$year[r])) item$year <- values$year[r]
+          item
+        }),
+        business_values = list(),
+        notes = as.list(year_note)
+      )
+    }
   }
 }
+
+variables <- c(custom_variables, exam_variables)
+
+# PAYLOAD --------------------------------------------------------------------
 
 payload <- list(
   meta = list(
     title = "건강보험 빅데이터 맞춤형연구DB",
-    source_file = basename(source_file),
-    source_sheet = source_sheet,
-    supplement_sheet = supplement_sheet,
-    requested_file = basename(requested_file),
-    requested_note = requested_note,
+    source_files = list(basename(source_file), basename(exam_file)),
     generated_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z"),
     total_variables = length(variables)
   ),
@@ -166,6 +285,8 @@ payload <- list(
 
 payload_json <- toJSON(payload, auto_unbox = TRUE, pretty = FALSE, na = "null")
 payload_json <- gsub("</", "<\\/", payload_json, fixed = TRUE)
+
+# RENDER ---------------------------------------------------------------------
 
 html_escape <- function(x, keep_breaks = TRUE) {
   x <- clean_text(x)
@@ -187,13 +308,22 @@ render_value_table_static <- function(values) {
     return('<div class="empty">-</div>')
   }
 
+  # 적용연도 열은 연도별로 코드가 달라지는 변수에서만 붙는다
+  has_year <- any(vapply(values, function(item) !is.null(item$year),
+                         logical(1)))
+
   rows <- vapply(values, function(item) {
     value <- if (item$value == "") "-" else item$value
     label <- if (item$label == "") "-" else item$label
+    year_cell <- if (!has_year) "" else paste0(
+      '<td class="value-year" data-label="적용연도">',
+      html_escape(if (is.null(item$year)) "-" else item$year), '</td>'
+    )
     paste0(
       '<tr>',
       '<td class="value-code" data-label="변수값">', html_escape(value), '</td>',
       '<td class="value-label" data-label="변수값설명">', html_escape(label), '</td>',
+      year_cell,
       '</tr>'
     )
   }, character(1))
@@ -201,6 +331,7 @@ render_value_table_static <- function(values) {
   paste0(
     '<div class="values-wrap"><table><thead><tr>',
     '<th>변수값</th><th>변수값설명</th>',
+    if (has_year) '<th>적용연도</th>' else '',
     '</tr></thead><tbody>',
     paste(rows, collapse = ""),
     '</tbody></table></div>'
@@ -230,11 +361,17 @@ render_card_static <- function(item) {
     )
   }
 
+  kicker <- html_escape(item$table)
+  if (nzchar(item$section)) {
+    kicker <- paste0(kicker, ' <span class="kicker-sub">',
+                     html_escape(item$section), '</span>')
+  }
+
   paste0(
     '<article class="card" data-table="', html_escape(item$table, keep_breaks = FALSE),
     '" data-variable="', html_escape(item$variable, keep_breaks = FALSE), '">',
     '<div class="card-head"><div>',
-    '<div class="kicker">', html_escape(item$table), '</div>',
+    '<div class="kicker">', kicker, '</div>',
     '<div class="var-line">',
     '<div class="var-name">', html_escape(item$variable), '</div>',
     '<div class="seq">순번 ', html_escape(item$seq), '</div>',
@@ -250,7 +387,9 @@ render_card_static <- function(item) {
 }
 
 source_note_html <- paste0(
-  '<strong>참고 파일</strong> <code>', html_escape(payload$meta$source_file), '</code>'
+  '<strong>참고 파일</strong> ',
+  paste0('<code>', html_escape(unlist(payload$meta$source_files)), '</code>',
+         collapse = " ")
 )
 
 cards_html <- paste(vapply(variables, render_card_static, character(1)), collapse = "\n")
@@ -572,6 +711,15 @@ html_head <- paste0('<!doctype html>
       word-break: keep-all;
     }
 
+    .kicker-sub {
+      margin-left: 5px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--muted);
+      font-size: .95em;
+    }
+
     .var-line {
       display: flex;
       flex-wrap: wrap;
@@ -687,6 +835,15 @@ html_head <- paste0('<!doctype html>
       overflow-wrap: anywhere;
     }
 
+    .value-year {
+      width: 22%;
+      min-width: 110px;
+      color: var(--muted);
+      font-size: .86em;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
     .empty {
       padding: 10px;
       color: var(--muted);
@@ -761,6 +918,11 @@ html_head <- paste0('<!doctype html>
 
       .value-code {
         width: 34%;
+        min-width: 0;
+      }
+
+      .value-year {
+        width: auto;
         min-width: 0;
       }
 
@@ -860,9 +1022,10 @@ html_tail <- '</script>
     };
 
     const renderSource = () => {
-      sourceNote.innerHTML = `
-        <strong>참고 파일</strong> <code>${escapeHtml(meta.source_file)}</code>
-      `;
+      const files = (meta.source_files || [])
+        .map((name) => `<code>${escapeHtml(name)}</code>`)
+        .join(" ");
+      sourceNote.innerHTML = `<strong>참고 파일</strong> ${files}`;
     };
 
     const renderValueTable = (values) => {
@@ -870,10 +1033,13 @@ html_tail <- '</script>
         return `<div class="empty">-</div>`;
       }
 
+      const hasYear = values.some((item) => item.year);
+
       const rows = values.map((item) => `
         <tr>
           <td class="value-code" data-label="변수값">${escapeHtml(item.value || "-")}</td>
           <td class="value-label" data-label="변수값설명">${escapeHtml(item.label || "-")}</td>
+          ${hasYear ? `<td class="value-year" data-label="적용연도">${escapeHtml(item.year || "-")}</td>` : ""}
         </tr>
       `).join("");
 
@@ -884,6 +1050,7 @@ html_tail <- '</script>
               <tr>
                 <th>변수값</th>
                 <th>변수값설명</th>
+                ${hasYear ? "<th>적용연도</th>" : ""}
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -907,11 +1074,15 @@ html_tail <- '</script>
         `
         : "";
 
+      const section = item.section
+        ? ` <span class="kicker-sub">${escapeHtml(item.section)}</span>`
+        : "";
+
       return `
         <article class="card ${isFocused ? "is-focused" : ""}">
           <div class="card-head">
             <div>
-              <div class="kicker">${escapeHtml(item.table)}</div>
+              <div class="kicker">${escapeHtml(item.table)}${section}</div>
               <div class="var-line">
                 <div class="var-name">${escapeHtml(item.variable)}</div>
                 <div class="seq">순번 ${escapeHtml(item.seq)}</div>
