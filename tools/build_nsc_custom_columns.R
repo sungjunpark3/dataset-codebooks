@@ -401,6 +401,17 @@ html_head <- paste0('<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
   <title>건강보험 빅데이터 맞춤형연구DB</title>
+  <script>
+    // 첫 화면을 그리기 전에 테마를 정해 깜빡임과 스위치 튐을 막는다
+    (function () {
+      var theme = null;
+      try { theme = localStorage.getItem("dataset-codebooks:theme"); } catch (error) {}
+      if (theme !== "light" && theme !== "dark") {
+        theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
   <style>
     @font-face {
       font-family: "PretendardVariable";
@@ -423,6 +434,12 @@ html_head <- paste0('<!doctype html>
       --accent-soft: #fff0ed;
       --focus: rgba(208, 71, 62, .24);
       --shadow: 0 1px 2px rgba(33, 37, 41, .05), 0 12px 34px rgba(33, 37, 41, .07);
+      --switch-track: #e3e7eb;
+      --switch-line: rgba(33, 37, 41, .1);
+      --switch-line-hover: rgba(33, 37, 41, .22);
+      --switch-thumb: #ffffff;
+      --switch-icon: #d0473e;
+      --switch-thumb-shadow: 0 1px 2px rgba(33, 37, 41, .2), 0 2px 6px rgba(33, 37, 41, .08);
     }
 
     :root[data-theme="dark"] {
@@ -439,6 +456,12 @@ html_head <- paste0('<!doctype html>
       --accent-soft: rgba(223, 105, 25, .16);
       --focus: rgba(223, 105, 25, .35);
       --shadow: 0 1px 2px rgba(0, 0, 0, .16), 0 14px 38px rgba(0, 0, 0, .18);
+      --switch-track: #16191c;
+      --switch-line: rgba(255, 255, 255, .1);
+      --switch-line-hover: rgba(255, 255, 255, .24);
+      --switch-thumb: #3c434a;
+      --switch-icon: #f5a65b;
+      --switch-thumb-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .25);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -456,6 +479,12 @@ html_head <- paste0('<!doctype html>
         --accent-soft: rgba(223, 105, 25, .16);
         --focus: rgba(223, 105, 25, .35);
         --shadow: 0 1px 2px rgba(0, 0, 0, .16), 0 14px 38px rgba(0, 0, 0, .18);
+        --switch-track: #16191c;
+        --switch-line: rgba(255, 255, 255, .1);
+        --switch-line-hover: rgba(255, 255, 255, .24);
+        --switch-thumb: #3c434a;
+        --switch-icon: #f5a65b;
+        --switch-thumb-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 2px 6px rgba(0, 0, 0, .25);
       }
     }
 
@@ -547,73 +576,90 @@ html_head <- paste0('<!doctype html>
       font-weight: 850;
     }
 
-    .theme-toggle {
+    /* 썸 크기와 이동 거리를 --sw-* 에서 계산해 어느 크기에서도 트랙 안에 맞는다 */
+    .theme-switch {
+      --sw-w: 52px;
+      --sw-h: 30px;
+      --sw-pad: 3px;
       position: relative;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 58px;
-      height: 34px;
-      padding: 3px;
-      border: 1px solid var(--line);
+      flex: 0 0 auto;
+      width: var(--sw-w);
+      height: var(--sw-h);
+      padding: 0;
+      border: 0;
       border-radius: 999px;
-      background: var(--panel);
-      color: var(--muted);
-      outline: none;
+      background: var(--switch-track);
+      box-shadow: inset 0 0 0 1px var(--switch-line);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: background-color .2s ease, box-shadow .2s ease;
     }
 
-    .theme-toggle:focus-visible {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 4px var(--focus);
-    }
-
-    .theme-toggle-track {
-      position: relative;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      align-items: center;
-      width: 100%;
-      height: 100%;
-    }
-
-    .theme-toggle-thumb {
+    /* 보이는 크기는 그대로 두고 터치 영역만 44px로 넓힌다 */
+    .theme-switch::before {
+      content: "";
       position: absolute;
-      top: 1px;
-      left: 1px;
-      width: 26px;
-      height: 26px;
-      border-radius: 999px;
-      background: var(--accent);
-      transition: transform .18s ease;
+      inset: calc((var(--sw-h) - 44px) / 2) -6px;
     }
 
-    :root[data-theme="dark"] .theme-toggle-thumb {
-      transform: translateX(24px);
+    :root:not([data-theme]) .theme-switch {
+      visibility: hidden;
     }
 
-    .theme-toggle-icon {
-      position: relative;
-      z-index: 1;
-      width: 15px;
-      height: 15px;
-      justify-self: center;
-      transition: color .18s ease;
+    .theme-switch:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
     }
 
-    .theme-toggle .sun-icon {
-      color: #ffffff;
+    @media (hover: hover) {
+      .theme-switch:hover {
+        box-shadow: inset 0 0 0 1px var(--switch-line-hover);
+      }
     }
 
-    .theme-toggle .moon-icon {
-      color: var(--muted);
+    .theme-switch-thumb {
+      position: absolute;
+      top: var(--sw-pad);
+      left: var(--sw-pad);
+      width: calc(var(--sw-h) - var(--sw-pad) * 2);
+      height: calc(var(--sw-h) - var(--sw-pad) * 2);
+      border-radius: 50%;
+      background: var(--switch-thumb);
+      box-shadow: var(--switch-thumb-shadow);
+      color: var(--switch-icon);
+      transition: transform .25s cubic-bezier(.4, 0, .2, 1), background-color .2s ease;
     }
 
-    :root[data-theme="dark"] .theme-toggle .sun-icon {
-      color: var(--muted);
+    :root[data-theme="dark"] .theme-switch-thumb {
+      transform: translateX(calc(var(--sw-w) - var(--sw-h)));
     }
 
-    :root[data-theme="dark"] .theme-toggle .moon-icon {
-      color: #ffffff;
+    .theme-switch-icon {
+      position: absolute;
+      inset: 0;
+      width: 14px;
+      height: 14px;
+      margin: auto;
+      transition: opacity .2s ease, transform .25s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    .theme-switch .moon-icon,
+    :root[data-theme="dark"] .theme-switch .sun-icon {
+      opacity: 0;
+      transform: rotate(-90deg) scale(.5);
+    }
+
+    :root[data-theme="dark"] .theme-switch .moon-icon {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .theme-switch,
+      .theme-switch-thumb,
+      .theme-switch-icon {
+        transition: none;
+      }
     }
 
     .controls {
@@ -889,11 +935,6 @@ html_head <- paste0('<!doctype html>
         display: none;
       }
 
-      .theme-toggle {
-        width: 54px;
-        height: 32px;
-      }
-
       .controls {
         grid-template-columns: 1fr;
         gap: 8px;
@@ -939,10 +980,10 @@ html_head <- paste0('<!doctype html>
       <div class="title-row">
         <h1>건강보험 빅데이터 맞춤형연구DB</h1>
         <div class="title-actions">
-          <button class="theme-toggle" id="themeToggle" type="button" aria-label="다크 모드로 전환" aria-pressed="false" title="화면 모드 전환">
-            <span class="theme-toggle-track" aria-hidden="true">
-              <span class="theme-toggle-thumb"></span>
-              <svg class="theme-toggle-icon sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <div class="count-pill">표시 변수 <b id="visibleCount">', length(variables), '</b> / <span id="totalCount">', length(variables), '</span></div>
+          <button class="theme-switch" id="themeToggle" type="button" role="switch" aria-checked="false" aria-label="다크 모드" title="다크 모드로 전환">
+            <span class="theme-switch-thumb" aria-hidden="true">
+              <svg class="theme-switch-icon sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="4"></circle>
                 <path d="M12 2v2"></path>
                 <path d="M12 20v2"></path>
@@ -953,12 +994,11 @@ html_head <- paste0('<!doctype html>
                 <path d="m6.34 17.66-1.41 1.41"></path>
                 <path d="m19.07 4.93-1.41 1.41"></path>
               </svg>
-              <svg class="theme-toggle-icon moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg class="theme-switch-icon moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
               </svg>
             </span>
           </button>
-          <div class="count-pill">표시 변수 <b id="visibleCount">', length(variables), '</b> / <span id="totalCount">', length(variables), '</span></div>
         </div>
       </div>
       <div class="controls">
@@ -1131,23 +1171,33 @@ html_tail <- '</script>
       noResults.classList.toggle("is-visible", filtered.length === 0);
     };
 
-    const preferredTheme = () => {
-      return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
+    const THEME_KEY = "dataset-codebooks:theme";
+    const darkQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+    const systemTheme = () => (darkQuery && darkQuery.matches ? "dark" : "light");
+
+    const savedTheme = () => {
+      try {
+        const value = localStorage.getItem(THEME_KEY);
+        return value === "light" || value === "dark" ? value : null;
+      } catch (error) {
+        return null;
+      }
     };
 
-    const syncThemeToggle = (theme) => {
-      const isDark = theme === "dark";
-      themeToggle.setAttribute("aria-pressed", String(isDark));
-      themeToggle.setAttribute("aria-label", isDark ? "라이트 모드로 전환" : "다크 모드로 전환");
-      themeToggle.title = isDark ? "라이트 모드로 전환" : "다크 모드로 전환";
+    // 시스템 설정과 같은 쪽을 고르면 저장값을 지워 다시 시스템을 따르게 한다
+    const rememberTheme = (theme) => {
+      try {
+        if (theme === systemTheme()) localStorage.removeItem(THEME_KEY);
+        else localStorage.setItem(THEME_KEY, theme);
+      } catch (error) {}
     };
 
     const applyTheme = (theme) => {
+      const isDark = theme === "dark";
       document.documentElement.setAttribute("data-theme", theme);
-      localStorage.setItem("dataset-codebooks-theme", theme);
-      syncThemeToggle(theme);
+      themeToggle.setAttribute("aria-checked", String(isDark));
+      themeToggle.title = isDark ? "라이트 모드로 전환" : "다크 모드로 전환";
     };
 
     const init = () => {
@@ -1156,8 +1206,7 @@ html_tail <- '</script>
       makeOptions(tableFilter, uniqueInOrder(variables.map((item) => item.table)), "전체 테이블");
       refreshVariableOptions();
 
-      const savedTheme = localStorage.getItem("dataset-codebooks-theme") || preferredTheme();
-      applyTheme(savedTheme);
+      applyTheme(savedTheme() || systemTheme());
 
       tableFilter.addEventListener("change", () => {
         refreshVariableOptions();
@@ -1166,9 +1215,18 @@ html_tail <- '</script>
 
       variableFilter.addEventListener("change", render);
       themeToggle.addEventListener("click", () => {
-        const currentTheme = document.documentElement.getAttribute("data-theme") || preferredTheme();
-        applyTheme(currentTheme === "dark" ? "light" : "dark");
+        const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+        applyTheme(next);
+        rememberTheme(next);
       });
+
+      if (darkQuery) {
+        const followSystem = () => {
+          if (!savedTheme()) applyTheme(systemTheme());
+        };
+        if (darkQuery.addEventListener) darkQuery.addEventListener("change", followSystem);
+        else if (darkQuery.addListener) darkQuery.addListener(followSystem);
+      }
 
       render();
     };
