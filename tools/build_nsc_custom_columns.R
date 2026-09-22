@@ -1,6 +1,7 @@
 library(data.table)
 library(readxl)
 library(jsonlite)
+library(xml2)
 
 # PATHS ----------------------------------------------------------------------
 
@@ -31,6 +32,7 @@ clean_text <- function(x) {
 
 clean_table <- function(x) {
   x <- clean_text(x)
+  x <- gsub("\n(?=\\()", "", x, perl = TRUE)  # "자격 및 보험료\n(BFC)" -> "자격 및 보험료(BFC)"
   x <- gsub("\n", " ", x)
   gsub(" +", " ", x)
 }
@@ -56,9 +58,11 @@ fill_down_character <- function(x) {
   out
 }
 
+# A1부터 읽어 rid = 엑셀 행 번호, cN = 엑셀 N번째 열이 되게 한다 (병합 범위와 맞추기 위해)
 read_clean_sheet <- function(path, sheet) {
   DT <- as.data.table(suppressMessages(
-    read_excel(path, sheet = sheet, col_names = FALSE, col_types = "text")
+    read_excel(path, sheet = sheet, col_names = FALSE, col_types = "text",
+               range = cell_limits(c(1, 1), c(NA, NA)))
   ))
   setnames(DT, paste0("c", seq_len(ncol(DT))))
   for (nm in names(DT)) {
@@ -66,6 +70,40 @@ read_clean_sheet <- function(path, sheet) {
   }
   DT[, rid := .I]
   DT
+}
+
+# readxl은 병합 정보를 주지 않으므로 시트 XML의 <mergeCell>을 직접 읽는다.
+# 결과는 시트 이름별 data.table(r1, c1, r2, c2).
+read_merges <- function(path) {
+  part <- function(name) read_xml(unz(path, name))
+  find <- function(doc, tag) xml_find_all(doc, paste0(".//*[local-name()=\"", tag, "\"]"))
+  col_index <- function(letters) {
+    vapply(strsplit(letters, ""), function(ch) {
+      Reduce(function(acc, d) acc * 26 + d, match(ch, LETTERS), 0)
+    }, numeric(1))
+  }
+
+  sheets <- find(part("xl/workbook.xml"), "sheet")
+  rels <- find(part("xl/_rels/workbook.xml.rels"), "Relationship")
+  targets <- setNames(xml_attr(rels, "Target"), xml_attr(rels, "Id"))
+  files <- sub("^/?(xl/)?", "xl/", targets[xml_attr(sheets, "id")])
+
+  merges <- lapply(files, function(file) {
+    refs <- xml_attr(find(part(file), "mergeCell"), "ref")
+    from <- sub(":.*$", "", refs)
+    to <- sub("^.*:", "", refs)
+    data.table(
+      r1 = as.integer(gsub("[A-Z]", "", from)), c1 = col_index(gsub("[0-9]", "", from)),
+      r2 = as.integer(gsub("[A-Z]", "", to)), c2 = col_index(gsub("[0-9]", "", to))
+    )
+  })
+  setNames(merges, xml_attr(sheets, "name"))
+}
+
+# (row, col) 셀을 덮는 병합 범위. 없으면 NULL
+merge_at <- function(merges, row, col) {
+  hit <- merges[r1 <= row & row <= r2 & c1 <= col & col <= c2]
+  if (nrow(hit) == 0) NULL else hit[1]
 }
 
 # CUSTOM_DB ------------------------------------------------------------------
@@ -77,30 +115,46 @@ source_file <- file.path(project_dir, "assets",
 source_sheet <- "맞춤형 제공 컬럼"
 supplement_sheet <- "사업장업종세분류"
 
-extract_value_pairs <- function(block) {
-  value_cols <- paste0("c", c(6, 8, 10, 12, 14))
-  label_cols <- paste0("c", c(7, 9, 11, 13, 15))
+# 변수 블록 하나에서 세부설명과 코드값을 셀 배치 순서대로 뽑는다.
+# - F:O 전체 병합은 세부설명이다. 여러 변수 행에 걸쳐 있으면(SICK_SYM1~5)
+#   각 변수에 같은 설명을 붙인다.
+# - F:G 병합은 코드값 소제목(ITEM_CD의 명세서항코드)이고, 그 뒤 코드값은
+#   다음 소제목까지 그 묶음에 속한다. 묶음마다 같은 코드가 반복되므로
+#   중복을 걸러내지 않는다.
+extract_custom_cells <- function(block, sheet_dt, merges) {
+  details <- list()
+  values <- list()
+  group <- ""
 
-  values <- rbindlist(lapply(seq_along(value_cols), function(i) {
-    data.table(
-      rid = block$rid,
-      pair_order = i,
-      value = block[[value_cols[i]]],
-      label = block[[label_cols[i]]]
-    )
-  }))
+  for (i in seq_len(nrow(block))) {
+    row <- block$rid[i]
+    m <- merge_at(merges, row, 6)
 
-  values <- values[!(is_blank(value) & is_blank(label))]
-  if (nrow(values) == 0) {
-    return(list())
+    if (!is.null(m) && m$c1 == 6 && m$c2 >= 15) {
+      text <- sheet_dt$c6[m$r1]
+      if ((m$r1 == row || i == 1) && nzchar(text)) {
+        details[[length(details) + 1]] <- list(text = text)
+      }
+      next
+    }
+
+    first_pair <- 1
+    if (!is.null(m) && m$c1 == 6 && m$c2 == 7) {
+      if (m$r1 == row) group <- block$c6[i]
+      first_pair <- 2
+    }
+
+    for (k in first_pair:5) {
+      value <- block[[paste0("c", 4 + 2 * k)]][i]
+      label <- block[[paste0("c", 5 + 2 * k)]][i]
+      if (is_blank(value) && is_blank(label)) next
+      item <- list(value = value, label = label)
+      if (nzchar(group)) item$group <- group
+      values[[length(values) + 1]] <- item
+    }
   }
 
-  setorder(values, rid, pair_order)
-  values <- values[, .(value = clean_text(value), label = clean_text(label))]
-  values <- unique(values, by = c("value", "label"))
-  lapply(seq_len(nrow(values)), function(i) {
-    list(value = values$value[i], label = values$label[i])
-  })
+  list(details = details, values = values)
 }
 
 extract_business_codes <- function(path, sheet) {
@@ -120,6 +174,7 @@ extract_business_codes <- function(path, sheet) {
 }
 
 main <- read_clean_sheet(source_file, source_sheet)
+main_merges <- read_merges(source_file)[[source_sheet]]
 
 main[, table_marker := fifelse(
   !is_blank(c1) & !c1 %in% c("맞춤형 제공 테이블 레이아웃", "테이블 구분"),
@@ -145,6 +200,7 @@ custom_variables <- lapply(seq_along(variable_starts), function(i) {
   block <- main[rid >= start & rid <= end]
   first <- block[1]
   notes <- unique_nonblank(block$c16)
+  cells <- extract_custom_cells(block, main, main_merges)
 
   list(
     table = first$table_group,
@@ -152,7 +208,8 @@ custom_variables <- lapply(seq_along(variable_starts), function(i) {
     seq = first$c3,
     variable = first$c4,
     description = first$c5,
-    values = extract_value_pairs(block),
+    details = cells$details,
+    values = cells$values,
     business_values = if (first$c4 == "INDTP_CD") business_codes else list(),
     notes = as.list(notes)
   )
@@ -177,24 +234,89 @@ compress_year_labels <- function(labels, gi) {
   paste(parts, collapse = ", ")
 }
 
-# 연도그룹 하나(gcol)에서 (변수값, 설명) 쌍을 셀 배치 순서대로 뽑는다.
-extract_exam_pairs <- function(block, gcol) {
-  pairs <- rbindlist(lapply(0:2, function(k) {
-    data.table(
-      ord = seq_len(nrow(block)) * 3 + k,
-      value = block[[paste0("c", gcol + 1 + k * 2)]],
-      label = block[[paste0("c", gcol + 2 + k * 2)]]
-    )
-  }))
-  pairs <- pairs[!(is_blank(value) & is_blank(label))]
-  setorder(pairs, ord)
-  unique(pairs[, .(value, label)], by = c("value", "label"))
+# 연도그룹 하나(gcol)에서 세부설명과 (변수값, 설명) 쌍을 셀 배치 순서대로 뽑는다.
+# 값 영역(gcol+1 ~ gcol+6)이 통째로 병합된 칸은 코드값이 아니라 세부설명이다.
+extract_exam_cells <- function(block, gcol, sheet_dt, merges) {
+  details <- character(0)
+  values <- list()
+
+  for (i in seq_len(nrow(block))) {
+    row <- block$rid[i]
+    for (k in 0:2) {
+      vcol <- gcol + 1 + k * 2
+      m <- merge_at(merges, row, vcol)
+
+      if (k == 0 && !is.null(m) && m$c1 == vcol && m$c2 >= gcol + 6) {
+        text <- sheet_dt[[paste0("c", vcol)]][m$r1]
+        if ((m$r1 == row || i == 1) && nzchar(text)) details <- c(details, text)
+        break
+      }
+      if (!is.null(m) && (m$r1 != row || m$c1 != vcol)) next
+
+      value <- block[[paste0("c", vcol)]][i]
+      label <- block[[paste0("c", vcol + 1)]][i]
+      if (is_blank(value) && is_blank(label)) next
+      values[[length(values) + 1]] <- list(value = value, label = label)
+    }
+  }
+
+  list(
+    details = data.table(text = details),
+    values = if (length(values) > 0) rbindlist(values)
+             else data.table(value = character(0), label = character(0))
+  )
 }
 
+# 연도그룹별 목록을 한 카드로 합친다. 모든 연도가 같으면 한 번만 싣고,
+# 다르면 합집합을 만들어 항목마다 적용연도를 붙인다.
+merge_years <- function(per_group, gi, year_labels) {
+  sig <- vapply(per_group, function(x) {
+    paste(do.call(paste, c(unname(as.list(x)), sep = "\t")), collapse = "\r")
+  }, character(1))
+  if (length(unique(sig)) == 1) {
+    return(copy(per_group[[1]])[, year := rep("", .N)][])
+  }
+
+  merged <- rbindlist(lapply(seq_along(gi), function(k) {
+    if (nrow(per_group[[k]]) == 0) return(NULL)
+    copy(per_group[[k]])[, grp := gi[k]]
+  }))
+  merged[, seen := .I]
+  out <- merged[, .(ord = min(seen), year = compress_year_labels(year_labels, grp)),
+                by = setdiff(names(merged), c("grp", "seen"))]
+  setorder(out, ord)
+  out[, ord := NULL][]
+}
+
+as_items <- function(dt) {
+  fields <- setdiff(names(dt), "year")
+  lapply(seq_len(nrow(dt)), function(r) {
+    item <- as.list(dt[r, ..fields])
+    if (nzchar(dt$year[r])) item$year <- dt$year[r]
+    item
+  })
+}
+
+# 원본 누락 보정. 엑셀은 그대로 두고 빌드할 때만 채운다.
+# 2002년 질환2 '결핵'(F15)만 코드값이 비었다. 같은 해 질환1·3과 2003년 이후
+# 질환2가 모두 1=결핵이다.
+exam_fixes <- list(
+  list(sheet = "2002-2008", row = 15L, col = 6L, value = "1")
+)
+
 exam_variables <- list()
+exam_merges <- read_merges(exam_file)
 
 for (sheet in excel_sheets(exam_file)) {
   exam <- read_clean_sheet(exam_file, sheet)
+
+  # 원본이 이미 채워졌으면 보정하지 않는다
+  fixes <- Filter(function(fix) fix$sheet == sheet, exam_fixes)
+  applied <- vapply(fixes, function(fix) is_blank(exam[[paste0("c", fix$col)]][fix$row]),
+                    logical(1))
+  if (any(!applied)) warning(sheet, " 시트의 보정 대상 칸이 채워져 있어 보정을 건너뜁니다.")
+  fixes <- fixes[applied]
+  for (fix in fixes) set(exam, fix$row, paste0("c", fix$col), fix$value)
 
   year_row <- unlist(exam[3, !"rid"])
   group_cols <- which(nzchar(year_row))
@@ -217,33 +339,17 @@ for (sheet in excel_sheets(exam_file)) {
     present <- which(nzchar(col_names))
     if (length(present) == 0) next
 
-    pairs_by_group <- lapply(present, function(k) {
-      extract_exam_pairs(block, group_cols[k])
+    cells_by_group <- lapply(present, function(k) {
+      extract_exam_cells(block, group_cols[k], exam, exam_merges[[sheet]])
     })
-    names(pairs_by_group) <- as.character(present)
+    names(cells_by_group) <- as.character(present)
 
     # 같은 블록이라도 연도에 따라 컬럼명이 바뀌면 카드를 나눈다 (예: 요단백)
     for (col_name in unique(col_names[present])) {
       gi <- present[col_names[present] == col_name]
-      picked <- pairs_by_group[as.character(gi)]
-      sig <- vapply(picked, function(x) {
-        paste(x$value, x$label, collapse = "\r")
-      }, character(1))
-
-      if (length(unique(sig)) == 1) {
-        values <- copy(picked[[1]])[, year := ""]
-      } else {
-        # 연도별 코드가 다르면 합집합을 만들고 쌍마다 적용연도를 붙인다
-        merged <- rbindlist(lapply(seq_along(gi), function(k) {
-          copy(picked[[k]])[, grp := gi[k]]
-        }))
-        merged[, seen := .I]
-        values <- merged[, .(ord = min(seen),
-                             year = compress_year_labels(year_labels, grp)),
-                         by = .(value, label)]
-        setorder(values, ord)
-        values[, ord := NULL]
-      }
+      picked <- cells_by_group[as.character(gi)]
+      details <- merge_years(lapply(picked, `[[`, "details"), gi, year_labels)
+      values <- merge_years(lapply(picked, `[[`, "values"), gi, year_labels)
 
       year_note <- if (length(gi) == length(group_cols)) {
         character(0)
@@ -257,11 +363,8 @@ for (sheet in excel_sheets(exam_file)) {
         seq = block$c1[1],
         variable = col_name,
         description = block$c2[1],
-        values = lapply(seq_len(nrow(values)), function(r) {
-          item <- list(value = values$value[r], label = values$label[r])
-          if (nzchar(values$year[r])) item$year <- values$year[r]
-          item
-        }),
+        details = as_items(details),
+        values = as_items(values),
         business_values = list(),
         notes = as.list(year_note)
       )
@@ -303,27 +406,61 @@ html_escape <- function(x, keep_breaks = TRUE) {
   x
 }
 
+# 적용연도 열은 연도별로 내용이 달라지는 변수에서만 붙는다
+has_year_static <- function(items) {
+  any(vapply(items, function(item) !is.null(item$year), logical(1)))
+}
+
+year_cell_static <- function(item, has_year) {
+  if (!has_year) return("")
+  paste0('<td class="value-year" data-label="적용연도">',
+         html_escape(if (is.null(item$year)) "-" else item$year), '</td>')
+}
+
+render_detail_table_static <- function(details) {
+  if (length(details) == 0) return("")
+  has_year <- has_year_static(details)
+
+  rows <- vapply(details, function(item) {
+    paste0(
+      '<tr><td class="value-detail" data-label="세부설명">', html_escape(item$text), '</td>',
+      year_cell_static(item, has_year), '</tr>'
+    )
+  }, character(1))
+
+  paste0(
+    '<div class="values-wrap"><table><thead><tr><th>세부설명</th>',
+    if (has_year) '<th>적용연도</th>' else '',
+    '</tr></thead><tbody>',
+    paste(rows, collapse = ""),
+    '</tbody></table></div>'
+  )
+}
+
 render_value_table_static <- function(values) {
-  if (length(values) == 0) {
-    return('<div class="empty">-</div>')
-  }
+  if (length(values) == 0) return("")
+  has_year <- has_year_static(values)
 
-  # 적용연도 열은 연도별로 코드가 달라지는 변수에서만 붙는다
-  has_year <- any(vapply(values, function(item) !is.null(item$year),
-                         logical(1)))
+  # 소제목(group)이 바뀌는 자리마다 소제목 행을 끼운다
+  groups <- vapply(values, function(item) {
+    if (is.null(item$group)) "" else item$group
+  }, character(1))
+  new_group <- groups != c("", head(groups, -1))
 
-  rows <- vapply(values, function(item) {
+  rows <- vapply(seq_along(values), function(i) {
+    item <- values[[i]]
     value <- if (item$value == "") "-" else item$value
     label <- if (item$label == "") "-" else item$label
-    year_cell <- if (!has_year) "" else paste0(
-      '<td class="value-year" data-label="적용연도">',
-      html_escape(if (is.null(item$year)) "-" else item$year), '</td>'
+    group_row <- if (!new_group[i]) "" else paste0(
+      '<tr class="value-group"><td colspan="', if (has_year) 3 else 2, '">',
+      html_escape(groups[i]), '</td></tr>'
     )
     paste0(
+      group_row,
       '<tr>',
       '<td class="value-code" data-label="변수값">', html_escape(value), '</td>',
       '<td class="value-label" data-label="변수값설명">', html_escape(label), '</td>',
-      year_cell,
+      year_cell_static(item, has_year),
       '</tr>'
     )
   }, character(1))
@@ -361,6 +498,10 @@ render_card_static <- function(item) {
     )
   }
 
+  body_html <- paste0(render_detail_table_static(item$details),
+                      render_value_table_static(item$values))
+  if (!nzchar(body_html)) body_html <- '<div class="empty">-</div>'
+
   kicker <- html_escape(item$table)
   if (nzchar(item$section)) {
     kicker <- paste0(kicker, ' <span class="kicker-sub">',
@@ -379,7 +520,7 @@ render_card_static <- function(item) {
     '<div class="desc">', html_escape(item$description), '</div>',
     '</div>', note_html, '</div>',
     '<div class="card-body"><section>',
-    render_value_table_static(item$values),
+    body_html,
     '</section>',
     business_html,
     '</div></article>'
@@ -890,6 +1031,24 @@ html_head <- paste0('<!doctype html>
       white-space: nowrap;
     }
 
+    .value-detail {
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    .values-wrap + .values-wrap {
+      margin-top: 10px;
+    }
+
+    .value-group td {
+      padding-top: 9px;
+      padding-bottom: 6px;
+      background: var(--panel-subtle);
+      color: var(--accent);
+      font-size: .8rem;
+      font-weight: 850;
+    }
+
     .empty {
       padding: 10px;
       color: var(--muted);
@@ -1068,20 +1227,57 @@ html_tail <- '</script>
       sourceNote.innerHTML = `<strong>참고 파일</strong> ${files}`;
     };
 
+    const yearCell = (item, hasYear) => hasYear
+      ? `<td class="value-year" data-label="적용연도">${escapeHtml(item.year || "-")}</td>`
+      : "";
+
+    const renderDetailTable = (details) => {
+      if (!details || details.length === 0) return "";
+
+      const hasYear = details.some((item) => item.year);
+      const rows = details.map((item) => `
+        <tr>
+          <td class="value-detail" data-label="세부설명">${escapeHtml(item.text)}</td>
+          ${yearCell(item, hasYear)}
+        </tr>
+      `).join("");
+
+      return `
+        <div class="values-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>세부설명</th>
+                ${hasYear ? "<th>적용연도</th>" : ""}
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    };
+
     const renderValueTable = (values) => {
-      if (!values || values.length === 0) {
-        return `<div class="empty">-</div>`;
-      }
+      if (!values || values.length === 0) return "";
 
       const hasYear = values.some((item) => item.year);
 
-      const rows = values.map((item) => `
-        <tr>
-          <td class="value-code" data-label="변수값">${escapeHtml(item.value || "-")}</td>
-          <td class="value-label" data-label="변수값설명">${escapeHtml(item.label || "-")}</td>
-          ${hasYear ? `<td class="value-year" data-label="적용연도">${escapeHtml(item.year || "-")}</td>` : ""}
-        </tr>
-      `).join("");
+      // 소제목(group)이 바뀌는 자리마다 소제목 행을 끼운다
+      let group = "";
+      const rows = values.map((item) => {
+        const itemGroup = item.group || "";
+        const groupRow = itemGroup !== group
+          ? `<tr class="value-group"><td colspan="${hasYear ? 3 : 2}">${escapeHtml(itemGroup)}</td></tr>`
+          : "";
+        group = itemGroup;
+        return `${groupRow}
+          <tr>
+            <td class="value-code" data-label="변수값">${escapeHtml(item.value || "-")}</td>
+            <td class="value-label" data-label="변수값설명">${escapeHtml(item.label || "-")}</td>
+            ${yearCell(item, hasYear)}
+          </tr>
+        `;
+      }).join("");
 
       return `
         <div class="values-wrap">
@@ -1118,6 +1314,8 @@ html_tail <- '</script>
         ? ` <span class="kicker-sub">${escapeHtml(item.section)}</span>`
         : "";
 
+      const body = renderDetailTable(item.details) + renderValueTable(item.values);
+
       return `
         <article class="card ${isFocused ? "is-focused" : ""}">
           <div class="card-head">
@@ -1133,7 +1331,7 @@ html_tail <- '</script>
           </div>
           <div class="card-body">
             <section>
-              ${renderValueTable(item.values || [])}
+              ${body || `<div class="empty">-</div>`}
             </section>
             ${businessBlock}
           </div>
