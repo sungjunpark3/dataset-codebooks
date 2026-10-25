@@ -1,0 +1,256 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>일반건강검진 흡연 문항 대조표</title>
+<style>
+  :root{
+    --cat:#E3EDF6; --cat-b:#9DBBD4;
+    --num:#E1F0E6; --num-b:#9CC9AC;
+    --yr :#F7EBD6; --yr-b :#DCBE85;
+    --off:#F4F5F6; --line:#DDE1E5; --ink:#1B2126; --mut:#8A9299;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#fff;
+    font-family:"Apple SD Gothic Neo","Pretendard",-apple-system,sans-serif;
+    color:var(--ink);-webkit-font-smoothing:antialiased}
+  .page{width:1480px;padding:40px 44px 34px}
+  h1{font-size:27px;font-weight:800;letter-spacing:-.4px;margin:0 0 7px}
+  .sub{font-size:14.5px;color:#5C656D;margin:0 0 20px;line-height:1.55}
+  .sub b{color:var(--ink);font-weight:700}
+
+  .key{display:flex;gap:20px;align-items:center;margin-bottom:18px;
+    font-size:13px;color:#4A5158}
+  .key i{display:inline-block;width:15px;height:15px;border-radius:3px;
+    margin-right:7px;vertical-align:-3px;border:1px solid}
+  .k1 i{background:var(--cat);border-color:var(--cat-b)}
+  .k2 i{background:var(--num);border-color:var(--num-b)}
+  .k3 i{background:var(--yr) ;border-color:var(--yr-b)}
+  .k4 i{background:var(--off);border-color:var(--line)}
+
+  table{border-collapse:separate;border-spacing:0;width:100%;
+    table-layout:fixed}
+  col.g{width:104px} col.c{width:182px}
+  thead th{font-size:16px;font-weight:800;padding:0 0 11px;text-align:center;
+    color:#2C343A;letter-spacing:-.2px}
+  thead th.l{text-align:left;font-size:13px;color:var(--mut);font-weight:700}
+
+  td{vertical-align:top;padding:13px 15px;border-radius:7px;
+    border:1px solid transparent}
+  td.grp{background:#F0F1F3;border-color:#E2E4E7;text-align:center;
+    vertical-align:middle;font-weight:800;font-size:14.5px;line-height:1.45;
+    letter-spacing:-.2px;padding:13px 8px}
+  td.cpt{background:#FAFBFB;border-color:#EDEFF1;font-weight:700;
+    font-size:14px;line-height:1.45;vertical-align:middle;
+    letter-spacing:-.2px}
+  td.cpt small{display:block;font-weight:600;color:#7E868D;font-size:12.5px;
+    margin-top:2px}
+
+  td.cat{background:var(--cat);border-color:var(--cat-b)}
+  td.num{background:var(--num);border-color:var(--num-b)}
+  td.yr {background:var(--yr) ;border-color:var(--yr-b)}
+  td.off{background:var(--off);border-color:var(--line);color:var(--mut);
+    text-align:center;vertical-align:middle;font-size:13px}
+
+  .var{font-family:"SF Mono","Menlo",monospace;font-size:14.5px;
+    font-weight:700;letter-spacing:-.3px;margin-bottom:5px;color:#111}
+  .q{font-size:12.8px;color:#59646D;margin-bottom:7px;line-height:1.4}
+  ul{margin:0;padding:0;list-style:none}
+  li{font-size:13.6px;line-height:1.62;display:flex;gap:8px}
+  li b{font-family:"SF Mono","Menlo",monospace;font-weight:700;
+    min-width:13px;color:#2C343A}
+  .free{font-size:14px;line-height:1.55}
+  .free code{font-family:"SF Mono","Menlo",monospace;font-weight:700;
+    font-size:14px;background:rgba(255,255,255,.72);padding:1px 6px;
+    border-radius:4px}
+  .free em{font-style:normal;color:#59646D;font-size:13px}
+  .note{margin-top:9px;padding-top:8px;border-top:1px dashed rgba(0,0,0,.16);
+    font-size:12.8px;line-height:1.45;color:#8A4B12;font-weight:700}
+  .note.blue{color:#1C4E7A}
+
+  .fn{margin-top:22px;font-size:12.4px;color:#8A9299;line-height:1.7}
+  .fn b{color:#5C656D}
+</style></head><body><div class="page">
+
+<h1>국민건강보험공단 일반건강검진 문진표 — 흡연 문항 대조표</h1>
+<p class="sub">행은 <b>물어보는 내용</b>, 열은 <b>조사 구간</b>.
+같은 개념이라도 구간마다 변수명과 값 체계가 달라진다.</p>
+
+<div class="key">
+  <span class="k1"><i></i>범주형 (코드값)</span>
+  <span class="k2"><i></i>직접 기재 (연속)</span>
+  <span class="k3"><i></i>연도 (YYYY)</span>
+  <span class="k4"><i></i>문항 없음 · 타 변수로 통합</span>
+</div>
+
+<table>
+<colgroup><col class="g"><col class="c"><col><col><col></colgroup>
+<thead><tr>
+  <th class="l">구분</th><th class="l">물어보는 내용</th>
+  <th>2002 – 2008</th><th>2009 – 2018</th><th>2019 – 2024</th>
+</tr></thead>
+<tbody>
+
+<tr>
+  <td class="grp" rowspan="8">일반담배<br>(궐련)</td>
+  <td class="cpt">흡연 경험 · 상태</td>
+  <td class="cat">
+    <div class="var">Q_SMK_YN</div>
+    <div class="q">현재 흡연 여부</div>
+    <ul><li><b>1</b><span>(거의) 피우지 않는다</span></li>
+        <li><b>2</b><span>과거에 피웠으나 지금은 끊었다</span></li>
+        <li><b>3</b><span>현재도 피운다</span></li></ul>
+    <div class="note">▸ 5갑 기준이 아니다</div></td>
+  <td class="cat">
+    <div class="var">Q_SMK_YN</div>
+    <div class="q">지금까지 평생 총 5갑(100개비) 이상의 담배를 피운 적이 있습니까?</div>
+    <ul><li><b>1</b><span>아니오</span></li>
+        <li><b>2</b><span>예, 지금은 끊었음</span></li>
+        <li><b>3</b><span>예, 현재도 흡연 중</span></li></ul></td>
+  <td class="cat">
+    <div class="var">Q_SMK_YN</div>
+    <div class="q">지금까지 평생 총 5갑(100개비) 이상의 담배를 피운 적이 있습니까?</div>
+    <ul><li><b>1</b><span>아니오</span></li>
+        <li><b>2</b><span>예</span></li></ul>
+    <div class="note">▸ 3분류 → 2분류. 현재 상태는 아래 문항으로 떨어져 나갔다</div></td>
+</tr>
+
+<tr>
+  <td class="cpt">현재 흡연 여부</td>
+  <td class="off">Q_SMK_YN 에 포함</td>
+  <td class="off">Q_SMK_YN 에 포함</td>
+  <td class="cat">
+    <div class="var">Q_SMK_NOW_YN</div>
+    <div class="q">현재 일반담배(궐련)을 피우십니까?</div>
+    <ul><li><b>1</b><span>현재 피움</span></li>
+        <li><b>2</b><span>과거에는 피웠으나 현재 피우지 않음</span></li></ul>
+    <div class="note blue">▸ 2019년부터 현재 흡연 여부는 이 변수로 판정한다</div></td>
+</tr>
+
+<tr>
+  <td class="cpt">하루 흡연량<small>현재</small></td>
+  <td class="cat">
+    <div class="var">Q_SMK_NOW_AMT_V0108</div>
+    <ul><li><b>1</b><span>반갑 미만</span></li>
+        <li><b>2</b><span>반갑 이상 – 한갑 미만</span></li>
+        <li><b>3</b><span>한갑 이상 – 두갑 미만</span></li>
+        <li><b>4</b><span>두갑</span></li></ul>
+    <div class="note">▸ 갑 단위 범주. 개비로 쓰려면 환산이 필요하다</div></td>
+  <td class="num">
+    <div class="var">Q_SMK_NOW_AMT_V09N</div>
+    <div class="free"><code>_개비</code> <em>직접 기재</em></div></td>
+  <td class="num">
+    <div class="var">Q_SMK_AMT</div>
+    <div class="free"><code>_개비</code> <em>직접 기재</em></div>
+    <div class="q" style="margin:7px 0 0">현재 · 과거 공통</div></td>
+</tr>
+
+<tr>
+  <td class="cpt">하루 흡연량<small>금연 전</small></td>
+  <td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_SMK_PRE_AMT</div>
+    <div class="free"><code>_개비</code> <em>직접 기재</em></div></td>
+  <td class="off">Q_SMK_AMT 로 통합</td>
+</tr>
+
+<tr>
+  <td class="cpt">흡연 기간<small>현재</small></td>
+  <td class="cat">
+    <div class="var">Q_SMK_DRT</div>
+    <ul><li><b>1</b><span>5년 미만</span></li>
+        <li><b>2</b><span>5 – 9년</span></li>
+        <li><b>3</b><span>10 – 19년</span></li>
+        <li><b>4</b><span>20 – 29년</span></li>
+        <li><b>5</b><span>30년 이상</span></li></ul></td>
+  <td class="num">
+    <div class="var">Q_SMK_NOW_DRT</div>
+    <div class="free"><code>_년</code> <em>직접 기재</em></div></td>
+  <td class="num">
+    <div class="var">Q_SMK_DRT</div>
+    <div class="free"><code>_년</code> <em>직접 기재</em></div>
+    <div class="q" style="margin:7px 0 0">현재 · 과거 공통</div>
+    <div class="note">▸ 2002–2008 과 이름이 같은데 범주형 → 연속형이다</div></td>
+</tr>
+
+<tr>
+  <td class="cpt">흡연 기간<small>금연 전</small></td>
+  <td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_SMK_PRE_DRT</div>
+    <div class="free"><code>_년</code> <em>직접 기재</em></div></td>
+  <td class="off">Q_SMK_DRT 로 통합</td>
+</tr>
+
+<tr>
+  <td class="cpt">흡연 시작연도</td>
+  <td class="yr">
+    <div class="var">Q_SMK_STRT_YR</div>
+    <div class="free"><code>YYYY</code></div>
+    <div class="note">▸ 2005 – 2008 년에만 제공</div></td>
+  <td class="off">문항 없음</td>
+  <td class="off">문항 없음</td>
+</tr>
+
+<tr>
+  <td class="cpt">금연 시점</td>
+  <td class="yr">
+    <div class="var">Q_SMK_STOP_YR</div>
+    <div class="free"><code>YYYY</code> <em>금연 시작연도</em></div>
+    <div class="note">▸ 2006 – 2008 년에만 제공</div></td>
+  <td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_SMK_STP_DRT</div>
+    <div class="free">끊은 지 <code>_년</code> <em>직접 기재</em></div></td>
+</tr>
+
+<tr>
+  <td class="grp" rowspan="5">가열식 담배<br>(궐련형<br>전자담배)</td>
+  <td class="cpt">사용 경험</td>
+  <td class="off">문항 없음</td><td class="off">문항 없음</td>
+  <td class="cat">
+    <div class="var">Q_HNBT_YN</div>
+    <div class="q">지금까지 궐련형 전자담배(가열담배, 예: 아이코스·글로·릴)를 피운 적 있습니까?</div>
+    <ul><li><b>1</b><span>아니오</span></li>
+        <li><b>2</b><span>예</span></li></ul></td>
+</tr>
+
+<tr>
+  <td class="cpt">현재 사용 여부</td>
+  <td class="off">문항 없음</td><td class="off">문항 없음</td>
+  <td class="cat">
+    <div class="var">Q_HNBT_NOW_YN</div>
+    <div class="q">현재 궐련형 전자담배(가열담배)를 피우십니까?</div>
+    <ul><li><b>1</b><span>현재 피움</span></li>
+        <li><b>2</b><span>과거에는 피웠으나 현재 피우지 않음</span></li></ul></td>
+</tr>
+
+<tr>
+  <td class="cpt">하루 사용량</td>
+  <td class="off">문항 없음</td><td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_HNBT_AMT</div>
+    <div class="free"><code>_개비</code> <em>직접 기재</em></div></td>
+</tr>
+
+<tr>
+  <td class="cpt">사용 기간</td>
+  <td class="off">문항 없음</td><td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_HNBT_DRT</div>
+    <div class="free"><code>_년</code> <em>직접 기재</em></div></td>
+</tr>
+
+<tr>
+  <td class="cpt">금연 시점</td>
+  <td class="off">문항 없음</td><td class="off">문항 없음</td>
+  <td class="num">
+    <div class="var">Q_HNBT_STP_DRT</div>
+    <div class="free">끊은 지 <code>_년</code> <em>직접 기재</em></div></td>
+</tr>
+
+</tbody></table>
+
+<p class="fn">
+<b>출처</b> 맞춤형 제공테이블 레이아웃(일반건강검진) 260527 · <code>dataset-codebooks/assets</code><br>
+<b>2018년 열 처리</b> 코드북은 2018을 별도 시트로 두지만, 궐련·가열담배 문항은 2009–2017과 완전히 동일해 한 열로 합쳤다. 2018의 차이는 액상형 전자담배 문항(<code>Q_ELEC_SMK_YN</code>, <code>Q_ELEC_SMK_AMT</code>) 추가뿐이며, 액상형은 이 표에서 제외했다.
+</p>
+
+</div></body></html>
